@@ -11,150 +11,173 @@ document.addEventListener('DOMContentLoaded', () => {
   const tableBody = document.querySelector('#data-table tbody');
   const importBtn = document.getElementById('import-file-btn');
   const fileInput = document.getElementById('file-input');
+  const clearBtn = document.getElementById('clear-btn');
+  
   const confirmModal = document.getElementById('confirm-modal');
+  const modalTitle = document.getElementById('modal-title');
+  const modalText = document.getElementById('modal-text');
   const modalCancel = document.getElementById('modal-cancel');
   const modalConfirm = document.getElementById('modal-confirm');
 
   let allResults = { posts: [] };
+  let isScraping = false;
+  let stopRequested = false;
+  let batchIdx = 0;
+  let postIdx = 0;
+  let pendingAction = null; // 'close' or 'clear'
 
-  // Custom Modal Logic
-  closeBtn.addEventListener('click', () => {
+  // Modal Control
+  const showModal = (title, text, action) => {
+    modalTitle.innerText = title;
+    modalText.innerText = text;
+    pendingAction = action;
     confirmModal.classList.remove('hidden');
-  });
+  };
 
-  modalCancel.addEventListener('click', () => {
+  closeBtn.addEventListener('click', () => showModal("Close Scraper?", "Any active progress and unsaved data will be lost.", 'close'));
+  clearBtn.addEventListener('click', () => showModal("Clear All Data?", "This will reset all batch progress and clear the table.", 'clear'));
+
+  modalCancel.addEventListener('click', () => { confirmModal.classList.add('hidden'); pendingAction = null; });
+  
+  modalConfirm.addEventListener('click', () => {
+    if (pendingAction === 'close') window.close();
+    if (pendingAction === 'clear') resetAll();
     confirmModal.classList.add('hidden');
   });
 
-  modalConfirm.addEventListener('click', () => {
-    window.close();
-  });
+  function resetAll() {
+    isScraping = false;
+    stopRequested = true;
+    batchIdx = 0;
+    postIdx = 0;
+    allResults = { posts: [] };
+    tableBody.innerHTML = '';
+    resultsContainer.classList.add('hidden');
+    urlsInput.value = '';
+    progressBar.style.width = "0%";
+    statusText.innerText = "Data cleared and reset.";
+    updateBtnUI('START');
+  }
 
-  // File Import Logic
+  // File Import
   importBtn.addEventListener('click', () => fileInput.click());
-
   fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target.result;
-      // Split by newline or comma
-      const foundUrls = content.split(/[\n,]+/)
-        .map(u => u.trim())
-        .filter(u => u.startsWith('http'))
-        .join('\n');
-      
-      if (foundUrls) {
-        urlsInput.value = (urlsInput.value.trim() ? urlsInput.value + '\n' : '') + foundUrls;
-        statusText.innerText = "URLs imported from file!";
-      } else {
-        statusText.innerText = "No valid URLs found in file.";
+    reader.onload = (ev) => {
+      const found = ev.target.result.split(/[\n,]+/).map(u => u.trim()).filter(u => u.startsWith('http')).join('\n');
+      if (found) {
+        urlsInput.value = (urlsInput.value.trim() ? urlsInput.value + '\n' : '') + found;
+        statusText.innerText = "URLs imported!";
       }
     };
     reader.readAsText(file);
-    fileInput.value = ''; // Reset for next import
+    fileInput.value = '';
   });
 
-  scrapeBtn.addEventListener('click', async () => {
-    const urls = urlsInput.value.split('\n').map(u => u.trim()).filter(u => u.length > 0);
-    let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  function updateBtnUI(state) {
+    const btnText = scrapeBtn.querySelector('.btn-text');
+    if (state === 'START') btnText.innerText = "Start Batch Deep Scrape";
+    if (state === 'STOP') btnText.innerText = "Stop / Pause Scrape";
+    if (state === 'CONTINUE') btnText.innerText = "Continue Scraping";
+    if (state === 'STOPPING') btnText.innerText = "Stopping...";
+  }
 
-    if (urls.length === 0) {
-      statusText.innerText = "Please enter at least one Reddit URL.";
+  scrapeBtn.addEventListener('click', async () => {
+    if (isScraping) {
+      stopRequested = true;
+      updateBtnUI('STOPPING');
       return;
     }
 
-    statusText.innerText = "Starting batch process...";
-    container.classList.add('loading');
-    progressBar.style.width = "5%";
-    scrapeBtn.disabled = true;
+    const urls = urlsInput.value.split('\n').map(u => u.trim()).filter(u => u.length > 0);
+    if (!urls.length) { statusText.innerText = "Please enter URLs first."; return; }
+
+    let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    
+    isScraping = true;
+    stopRequested = false;
+    updateBtnUI('STOP');
     resultsContainer.classList.remove('hidden');
-    tableBody.innerHTML = ''; // Clear previous table data
-    allResults = { posts: [] };
+    container.classList.add('loading');
 
     try {
-      for (let batchIndex = 0; batchIndex < urls.length; batchIndex++) {
-        const currentBatchUrl = urls[batchIndex];
-        statusText.innerText = `[${batchIndex + 1}/${urls.length}] Navigating to ${currentBatchUrl}...`;
+      for (; batchIdx < urls.length; batchIdx++) {
+        if (stopRequested) break;
+        const currentUrl = urls[batchIdx];
         
-        // Navigate or ensure we are on the right page for link collection
-        if (tab.url !== currentBatchUrl) {
-          await chrome.tabs.update(tab.id, { url: currentBatchUrl });
-          await new Promise(r => setTimeout(r, 6000)); // Wait for page load
-        }
-
-        const loadExtra = document.getElementById('load-extra').checked;
-        if (loadExtra) {
-          statusText.innerText = `[${batchIndex + 1}/${urls.length}] Auto-scrolling...`;
-          await chrome.tabs.sendMessage(tab.id, { action: "auto_scroll", maxScrolls: 5 });
+        if (postIdx === 0) { // Only navigate if we are starting a fresh batch URL
+          statusText.innerText = `[${batchIdx + 1}/${urls.length}] Navigating...`;
+          if (tab.url !== currentUrl) {
+            await chrome.tabs.update(tab.id, { url: currentUrl });
+            await new Promise(r => setTimeout(r, 6000));
+          }
+          const loadExtra = document.getElementById('load-extra').checked;
+          if (loadExtra) {
+            statusText.innerText = `[${batchIdx + 1}/${urls.length}] Scrolling...`;
+            await chrome.tabs.sendMessage(tab.id, { action: "auto_scroll", maxScrolls: 5 });
+          }
         }
 
         const { links } = await chrome.tabs.sendMessage(tab.id, { action: "get_post_links" });
-        if (!links || links.length === 0) continue;
+        if (!links || !links.length) { postIdx = 0; continue; }
 
-        for (let i = 0; i < links.length; i++) {
-          let link = links[i];
-          if (!link.endsWith('/')) link += '/';
-          const jsonUrl = link + '.json';
+        for (; postIdx < links.length; postIdx++) {
+          if (stopRequested) break;
+          let link = links[postIdx];
+          const jsonUrl = (link.endsWith('/') ? link : link + '/') + '.json';
           
-          const overallProgress = 5 + Math.floor(((batchIndex * links.length + i) / (urls.length * links.length)) * 95);
-          progressBar.style.width = `${overallProgress}%`;
-          statusText.innerText = `[${batchIndex + 1}/${urls.length}] Scraping post ${i + 1}/${links.length}...`;
+          const progress = Math.floor(((batchIdx * links.length + postIdx) / (urls.length * links.length)) * 100);
+          progressBar.style.width = `${progress}%`;
+          statusText.innerText = `[${batchIdx + 1}/${urls.length}] Post ${postIdx + 1}/${links.length}`;
 
           try {
             const res = await fetch(jsonUrl).then(r => r.json());
-            const postData = res[0].data.children[0].data;
-            const commentsData = res[1].data.children;
-
-            const post = {
-              type: 'post',
-              title: postData.title,
-              author: postData.author,
-              date: formatDate(postData.created_utc),
-              content: postData.selftext || '',
-              url: link,
-              comments: []
-            };
-
+            const pData = res[0].data.children[0].data;
+            const post = { type: 'post', author: pData.author, title: pData.title, date: formatDate(pData.created_utc), content: pData.selftext || '', url: link, comments: [] };
             renderTableRow('POST', post.author, post.date, post.title);
-
-            const parseComments = (children, depth = 0, parentId = null) => {
-              const items = [];
+            
+            const parse = (children, depth = 0, pId = null) => {
+              const itms = [];
               children.forEach(c => {
                 if (c.kind !== 't1') return;
                 const d = c.data;
-                const comment = {
-                  type: depth === 0 ? 'comment' : 'reply',
-                  author: d.author,
-                  date: formatDate(d.created_utc),
-                  content: (d.body || '').replace(/\s+/g, ' ').trim(),
-                  depth: depth,
-                  parentId: d.parent_id || parentId,
-                  id: d.name
-                };
-                items.push(comment);
-                renderTableRow(comment.type.toUpperCase(), comment.author, comment.date, comment.content);
-                if (d.replies && d.replies.data && d.replies.data.children) {
-                  items.push(...parseComments(d.replies.data.children, depth + 1, d.name));
-                }
+                const comm = { type: depth === 0 ? 'comment' : 'reply', author: d.author, date: formatDate(d.created_utc), content: (d.body || '').replace(/\s+/g, ' ').trim(), depth, parentId: d.parent_id || pId, id: d.name };
+                itms.push(comm);
+                renderTableRow(comm.type.toUpperCase(), comm.author, comm.date, comm.content);
+                if (d.replies && d.replies.data) itms.push(...parse(d.replies.data.children, depth + 1, d.name));
               });
-              return items;
+              return itms;
             };
-
-            post.comments = parseComments(commentsData);
+            post.comments = parse(res[1].data.children);
             allResults.posts.push(post);
           } catch (e) { console.error(e); }
           await new Promise(r => setTimeout(r, 600));
         }
+
+        if (!stopRequested) postIdx = 0; // Reset post index if we finished this batch link
       }
-      updateStatus(allResults);
+
+      if (!stopRequested) {
+        updateStatus(allResults);
+        updateBtnUI('START');
+        batchIdx = 0; postIdx = 0;
+      } else {
+        statusText.innerText = "Scraping Paused.";
+        updateBtnUI('CONTINUE');
+      }
+
     } catch (err) {
       statusText.innerText = "Error: " + err.message;
     } finally {
-      scrapeBtn.disabled = false;
+      isScraping = false;
       container.classList.remove('loading');
+      // Enable export buttons if we have any results (even partials)
+      if (allResults.posts.length > 0) {
+        downloadBtn.disabled = false;
+        jsonBtn.disabled = false;
+      }
     }
   });
 

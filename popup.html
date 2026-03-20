@@ -4,9 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Reddit Scraper Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="popup.css">
 </head>
-<body>
+<body class="premium-theme">
   <div class="glass-container">
     <header>
       <div class="header-row">
@@ -37,10 +40,13 @@
         </div>
       </div>
 
-      <button id="scrape-btn" class="primary-btn">
-        <span class="btn-text">Start Batch Deep Scrape</span>
-        <div class="btn-glow"></div>
-      </button>
+      <div class="action-btns">
+        <button id="scrape-btn" class="primary-btn">
+          <span class="btn-text">Start Batch Deep Scrape</span>
+          <div class="btn-glow"></div>
+        </button>
+        <button id="clear-btn" class="secondary-btn" title="Clear All Data">Clear All</button>
+      </div>
 
       <div id="results-container" class="results-card hidden">
         <h3>Scraped Data Preview</h3>
@@ -72,11 +78,11 @@
     <!-- Custom Confirm Modal -->
     <div id="confirm-modal" class="modal-overlay hidden">
       <div class="glass-modal">
-        <h3>Close Scraper?</h3>
-        <p>Your current batch and scraped data in the view will be lost.</p>
+        <h3 id="modal-title">Close Scraper?</h3>
+        <p id="modal-text">Your current batch and scraped data in the view will be lost.</p>
         <div class="modal-btns">
-          <button id="modal-cancel">Stay</button>
-          <button id="modal-confirm" class="danger-btn">Close Now</button>
+          <button id="modal-cancel">Keep Working</button>
+          <button id="modal-confirm" class="danger-btn">Delete All</button>
         </div>
       </div>
     </div>

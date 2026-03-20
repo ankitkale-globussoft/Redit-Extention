@@ -5,7 +5,12 @@
   "description": "Scrape Reddit posts, comments, and replies into CSV.",
   "permissions": ["activeTab", "scripting", "downloads", "sidePanel"],
   "action": {
-    "default_title": "Open Reddit Scraper"
+    "default_title": "Open Reddit Scraper",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "background": {
     "service_worker": "background.js"
