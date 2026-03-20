@@ -9,6 +9,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const urlsInput = document.getElementById('community-urls');
   const resultsContainer = document.getElementById('results-container');
   const tableBody = document.querySelector('#data-table tbody');
+  const postCntEl = document.getElementById('post-count');
+  const commCntEl = document.getElementById('comment-count');
+  const replyCntEl = document.getElementById('reply-count');
+  
   const importBtn = document.getElementById('import-file-btn');
   const fileInput = document.getElementById('file-input');
   const clearBtn = document.getElementById('clear-btn');
@@ -25,6 +29,14 @@ document.addEventListener('DOMContentLoaded', () => {
   let batchIdx = 0;
   let postIdx = 0;
   let pendingAction = null; // 'close' or 'clear'
+
+  const counts = { posts: 0, comments: 0, replies: 0 };
+
+  const updateMetricsUI = () => {
+    postCntEl.innerText = counts.posts;
+    commCntEl.innerText = counts.comments;
+    replyCntEl.innerText = counts.replies;
+  };
 
   // Modal Control
   const showModal = (title, text, action) => {
@@ -51,11 +63,13 @@ document.addEventListener('DOMContentLoaded', () => {
     batchIdx = 0;
     postIdx = 0;
     allResults = { posts: [] };
+    counts.posts = 0; counts.comments = 0; counts.replies = 0;
     tableBody.innerHTML = '';
     resultsContainer.classList.add('hidden');
     urlsInput.value = '';
     progressBar.style.width = "0%";
     statusText.innerText = "Data cleared and reset.";
+    updateMetricsUI();
     updateBtnUI('START');
   }
 
@@ -107,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (stopRequested) break;
         const currentUrl = urls[batchIdx];
         
-        if (postIdx === 0) { // Only navigate if we are starting a fresh batch URL
+        if (postIdx === 0) {
           statusText.innerText = `[${batchIdx + 1}/${urls.length}] Navigating...`;
           if (tab.url !== currentUrl) {
             await chrome.tabs.update(tab.id, { url: currentUrl });
@@ -136,7 +150,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch(jsonUrl).then(r => r.json());
             const pData = res[0].data.children[0].data;
             const post = { type: 'post', author: pData.author, title: pData.title, date: formatDate(pData.created_utc), content: pData.selftext || '', url: link, comments: [] };
+            
+            counts.posts++;
             renderTableRow('POST', post.author, post.date, post.title);
+            updateMetricsUI();
             
             const parse = (children, depth = 0, pId = null) => {
               const itms = [];
@@ -144,8 +161,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (c.kind !== 't1') return;
                 const d = c.data;
                 const comm = { type: depth === 0 ? 'comment' : 'reply', author: d.author, date: formatDate(d.created_utc), content: (d.body || '').replace(/\s+/g, ' ').trim(), depth, parentId: d.parent_id || pId, id: d.name };
-                itms.push(comm);
+                
+                if (depth === 0) counts.comments++; else counts.replies++;
                 renderTableRow(comm.type.toUpperCase(), comm.author, comm.date, comm.content);
+                updateMetricsUI();
+
+                itms.push(comm);
                 if (d.replies && d.replies.data) itms.push(...parse(d.replies.data.children, depth + 1, d.name));
               });
               return itms;
@@ -156,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
           await new Promise(r => setTimeout(r, 600));
         }
 
-        if (!stopRequested) postIdx = 0; // Reset post index if we finished this batch link
+        if (!stopRequested) postIdx = 0;
       }
 
       if (!stopRequested) {
