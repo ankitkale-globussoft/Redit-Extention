@@ -9,17 +9,24 @@
 <body>
   <div class="glass-container">
     <header>
-      <h1>Reddit Scraper</h1>
-      <p class="subtitle">Extract data with ease</p>
+      <div class="header-row">
+        <h1>Reddit Scraper</h1>
+        <button id="close-panel-btn" class="close-btn" title="Close Panel">×</button>
+      </div>
+      <p class="subtitle">Deep Scrape Reddit Community Data</p>
     </header>
     
     <main>
       <div class="input-card">
-        <label for="community-url">Community URL (Subreddit or Profile)</label>
-        <input type="text" id="community-url" placeholder="https://www.reddit.com/r/..." />
+        <div class="label-row">
+          <label for="community-urls">Batch URLs (One per line)</label>
+          <button id="import-file-btn" class="mini-btn">Import File</button>
+          <input type="file" id="file-input" accept=".txt,.csv" hidden />
+        </div>
+        <textarea id="community-urls" placeholder="https://www.reddit.com/r/..." rows="3"></textarea>
         <div class="toggle-row">
           <input type="checkbox" id="load-extra" checked>
-          <label for="load-extra">Load more posts (Auto-scroll)</label>
+          <label for="load-extra">Auto-scroll listing (5 scrolls)</label>
         </div>
       </div>
 
@@ -31,19 +38,48 @@
       </div>
 
       <button id="scrape-btn" class="primary-btn">
-        <span class="btn-text">Scrape Current / Community</span>
+        <span class="btn-text">Start Batch Deep Scrape</span>
         <div class="btn-glow"></div>
       </button>
 
+      <div id="results-container" class="results-card hidden">
+        <h3>Scraped Data Preview</h3>
+        <div class="table-wrapper">
+          <table id="data-table">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Author</th>
+                <th>Date</th>
+                <th>Content Preview</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="download-actions">
-        <button id="download-btn" class="secondary-btn" disabled>CSV</button>
-        <button id="json-btn" class="secondary-btn" disabled>JSON</button>
+        <button id="download-btn" class="secondary-btn" disabled>Export CSV</button>
+        <button id="json-btn" class="secondary-btn" disabled>Export JSON</button>
       </div>
     </main>
 
     <footer>
       <p>&copy; 2025 Antigravity</p>
     </footer>
+
+    <!-- Custom Confirm Modal -->
+    <div id="confirm-modal" class="modal-overlay hidden">
+      <div class="glass-modal">
+        <h3>Close Scraper?</h3>
+        <p>Your current batch and scraped data in the view will be lost.</p>
+        <div class="modal-btns">
+          <button id="modal-cancel">Stay</button>
+          <button id="modal-confirm" class="danger-btn">Close Now</button>
+        </div>
+      </div>
+    </div>
   </div>
   <script src="utils.js"></script>
   <script src="popup.js"></script>
